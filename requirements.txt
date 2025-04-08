@@ -1,4 +1,4 @@
-portaudio
+
 streamlit
 streamlit-audiorecorder
 speechrecognition
@@ -9,4 +9,4 @@ scipy
 nltk
 soundfile
 transformers>=4.26.0
-
+portaudio
