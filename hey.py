@@ -53,10 +53,24 @@ def record_audio(filename="user_voice.wav", duration=5, fs=44100):
     
     # Provide a dropdown to select device
     device_names = [device['name'] for device in input_devices]
+    
+    if len(device_names) == 0:
+        st.error("⚠️ No input devices found. Please connect a microphone.")
+        return
+    
     device_index = st.selectbox("Select your microphone", device_names)
 
     # Get the device index based on the selection
-    selected_device = next(device for device in input_devices if device['name'] == device_index)
+    selected_device = None
+    for device in input_devices:
+        if device['name'] == device_index:
+            selected_device = device
+            break
+    
+    if selected_device is None:
+        st.error(f"⚠️ Device '{device_index}' not found.")
+        return
+
     device_id = selected_device['index']
 
     try:
