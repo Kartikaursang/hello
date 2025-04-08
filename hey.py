@@ -3,27 +3,36 @@ import librosa
 import numpy as np
 import sounddevice as sd
 import scipy.io.wavfile as wav
-import torch
-import speech_recognition as sr
-import nltk
 import streamlit as st
 import random
-from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
+import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
+import speech_recognition as sr
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
 
-# Initialize NLTK
-nltk.download('vader_lexicon')
-sia = SentimentIntensityAnalyzer()
+st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", 
+                   page_icon="🎙️", 
+                   layout="centered")
 
-# Load BERT sentiment model
-MODEL_PATH = "bert_emotion_model"  # Replace with actual folder path
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
+# Download NLTK resources
+nltk.download('vader_lexicon', quiet=True)
 
-# Emotion labels (customize if needed to match your model's training order)
+# Load BERT model and tokenizer
+BERT_MODEL_PATH = "bert_emotion_model"
+
+try:
+    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_PATH)
+    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL_PATH)
+    model.eval()
+    st.success("✅ BERT emotion model loaded successfully!")
+except Exception as e:
+    st.error(f"❌ Failed to load BERT emotion model: {e}")
+
+# Emotion labels (customize as per your model training order)
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
-id2label = {i: label for i, label in enumerate(bert_emotion_labels)}  # ✅ Add this line
+
 
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
@@ -37,94 +46,47 @@ emotion_responses = {
 video_links = {
     "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
     "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
-    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",
-    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",
+    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
+    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
     "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
     "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
 
-# Record audio
-def record_audio(filename="user_voice.wav", duration=5, fs=44100):
-    st.write("🎤 Recording... Speak now!")
+# ---------------- Functions ----------------
 
-    # List available audio devices
-    devices = sd.query_devices()
-    input_devices = [device for i, device in enumerate(devices) if device['max_input_channels'] > 0]
-    
-    # Provide a dropdown to select device
-    device_names = [device['name'] for device in input_devices]
-    
-    if len(device_names) == 0:
-        st.error("⚠️ No input devices found. Please connect a microphone.")
-        return
-    
-    device_index = st.selectbox("Select your microphone", device_names)
-
-    # Get the device index based on the selection
-    selected_device = None
-    for device in input_devices:
-        if device['name'] == device_index:
-            selected_device = device
-            break
-    
-    if selected_device is None:
-        st.error(f"⚠️ Device '{device_index}' not found.")
-        return
-
-    device_id = selected_device['index']
-
-    try:
-        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16, device=device_id)
-        sd.wait()
-        wav.write(filename, fs, audio)
-        st.success("✅ Recording saved!")
-    except Exception as e:
-        st.error(f"Error recording audio: {str(e)}")
-
-# Convert speech to text
-def speech_to_text(file_path):
+def speech_to_text_from_audio(audio_data):
     recognizer = sr.Recognizer()
-    with sr.AudioFile(file_path) as source:
-        audio = recognizer.record(source)
+    with sr.AudioData(audio_data.tobytes(), 16000, 2) as source_audio:
         try:
-            return recognizer.recognize_google(audio)
-        except (sr.UnknownValueError, sr.RequestError):
+            text = recognizer.recognize_google(source_audio)
+            return text
+        except sr.UnknownValueError:
             return None
 
-# BERT-based sentiment analyzer
-def analyze_sentiment_bert(text):
+def predict_bert_emotion(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
         outputs = model(**inputs)
-        scores = outputs.logits[0].numpy()
-        probs = softmax(scores)
-        predicted_label = np.argmax(probs)
-    return id2label[predicted_label]
+    scores = softmax(outputs.logits.numpy()[0])
+    top_index = np.argmax(scores)
+    return bert_emotion_labels[top_index]
 
-# Generate chatbot response
 def generate_response(emotion):
     return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
 
-# Streamlit UI
-st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", page_icon="🎙️", layout="centered")
+# ---------------- WebRTC Audio Processor ----------------
+
+class AudioProcessor(AudioProcessorBase):
+    def recv(self, frame):
+        return np.array(frame.to_ndarray())  # Return the raw audio frame as ndarray
+
+# ---------------- UI ----------------
 
 st.markdown("""
     <style>
-    .stApp {
-        background: linear-gradient(to right, #FFDEE9, #B5FFFC);
-        font-family: 'Arial', sans-serif;
-    }
-    .title {
-        color: #ff4b5c;
-        font-size: 36px;
-        font-weight: bold;
-        text-align: center;
-    }
-    .subtitle {
-        color: #333;
-        font-size: 18px;
-        text-align: center;
-    }
+    .stApp { background: linear-gradient(to right, #FFDEE9, #B5FFFC); font-family: 'Arial', sans-serif; }
+    .title { color: #ff4b5c; font-size: 36px; font-weight: bold; text-align: center; }
+    .subtitle { color: #333; font-size: 18px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -136,42 +98,44 @@ input_type = st.sidebar.radio("", ["Text", "Voice"])
 
 if input_type == "Text":
     user_text = st.text_input("💬 Type your message:")
-    if st.button("Analyze Emotion 🎭", key="analyze_text"):
+    if st.button("Analyze Emotion 🎭"):
         if user_text:
             with st.spinner("🔍 Analyzing Emotion..."):
-                detected_emotion = analyze_sentiment_bert(user_text)
+                detected_emotion = predict_bert_emotion(user_text)
             st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
             st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
             if detected_emotion in video_links:
-                st.markdown("### 📺 **Check out this video!**")
                 st.video(video_links[detected_emotion])
         else:
             st.warning("⚠️ Please enter some text.")
 
 elif input_type == "Voice":
-    if st.button("🎙️ Record Voice", key="record_voice"):
-        record_audio("user_voice.wav")
-
-    if st.button("Analyze Voice Emotion 🎭", key="analyze_voice"):
-        with st.spinner("🎧 Processing Audio..."):
-            text = speech_to_text("user_voice.wav")
+    st.write("🎙️ Record your voice:")
+    webrtc_ctx = webrtc_streamer(
+        key="audio-input-demo",
+        mode=WebRtcMode.SENDRECV,
+        audio_processor_factory=AudioProcessor,
+        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    )
+    
+    if webrtc_ctx.state.playing:
+        audio_data = webrtc_ctx.audio_receiver.get_audio()
+        if audio_data is not None:
+            st.write("🎧 Processing audio...")
+            text = speech_to_text_from_audio(audio_data)
             if text:
-                detected_emotion = analyze_sentiment_bert(text)
+                st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
+                detected_emotion = predict_bert_emotion(text)
+                st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+                st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
+                if detected_emotion in video_links:
+                    st.video(video_links[detected_emotion])
             else:
-                detected_emotion = "neutral"  # fallback
+                st.warning("⚠️ Could not detect any speech. Please try again.")
 
-        if text:
-            st.markdown(f"### 📝 **Recorded Text:** _{text}_")
-
-        st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
-        st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
-        if detected_emotion in video_links:
-            st.markdown("### 📺 **Check out this video!**")
-            st.video(video_links[detected_emotion])
-
-# Sidebar Extras
+# ---------------- Sidebar Features ----------------
 st.sidebar.markdown("## 🌟 Features")
-st.sidebar.write("Detect emotion from **text** or **voice**")  
-st.sidebar.write("Get AI-generated **chatbot responses**")  
-st.sidebar.write("Receive **video recommendations**")  
-st.sidebar.write("**Modern UI with smooth gradients**")
+st.sidebar.write("✅ Detect emotion from text or voice")  
+st.sidebar.write("🤖 AI-generated chatbot responses")  
+st.sidebar.write("📺 Video recommendations based on emotion")
+
