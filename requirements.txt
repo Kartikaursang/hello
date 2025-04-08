@@ -4,7 +4,7 @@ streamlit-audiorecorder
 speechrecognition
 librosa
 torch
-
+sounddevice 
 scipy
 nltk
 soundfile
