@@ -1,9 +1,10 @@
+
 streamlit
+streamlit-audiorecorder
+speechrecognition
 librosa
-numpy
-sounddevice
-scipy
 torch
 transformers
+scipy
 nltk
-SpeechRecognition
+soundfile
