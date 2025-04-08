@@ -29,10 +29,10 @@ try:
 except Exception as e:
     st.error(f"❌ Failed to load BERT emotion model: {e}")
 
-# Emotion labels (customize as per your model training order)
+# Emotion labels
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
-
+# Emotion response mapping
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
     "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
@@ -45,20 +45,25 @@ emotion_responses = {
 video_links = {
     "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
     "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
-    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
-    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
+    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",
+    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",
     "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
     "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
 
-# ---------------- Functions ----------------
+# ---------- Functions ----------
 
 def record_audio(filename="user_voice.wav", duration=5, fs=44100):
-    st.write("🎤 Recording... Speak now!")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
-    sd.wait()
-    wav.write(filename, fs, audio)
-    st.success("✅ Recording saved!")
+    try:
+        st.write("🎤 Recording... Speak now!")
+        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
+        sd.wait()
+        wav.write(filename, fs, audio)
+        st.success("✅ Recording saved!")
+        return True
+    except Exception as e:
+        st.error("❌ Voice recording is not supported in this environment.")
+        return False
 
 def speech_to_text(file_path):
     recognizer = sr.Recognizer()
@@ -80,7 +85,7 @@ def predict_bert_emotion(text):
 def generate_response(emotion):
     return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
 
-# ---------------- UI ----------------
+# ---------- UI ----------
 
 st.markdown("""
     <style>
@@ -96,6 +101,7 @@ st.markdown('<p class="subtitle">Detect emotions from your voice or text and rec
 st.sidebar.title("🔍 Choose Input Method")
 input_type = st.sidebar.radio("", ["Text", "Voice"])
 
+# ---------- Text Input ----------
 if input_type == "Text":
     user_text = st.text_input("💬 Type your message:")
     if st.button("Analyze Emotion 🎭"):
@@ -109,31 +115,34 @@ if input_type == "Text":
         else:
             st.warning("⚠️ Please enter some text.")
 
+# ---------- Voice Input ----------
 elif input_type == "Voice":
     if st.button("🎙️ Record Voice"):
-        record_audio("user_voice.wav")
+        success = record_audio("user_voice.wav")
+        if not success:
+            st.info("💡 Try the text mode instead!")
 
     if st.button("Analyze Voice Emotion 🎭"):
         with st.spinner("🎧 Processing Audio..."):
-            try:
-                text = speech_to_text("user_voice.wav")
-                if text:
-                    st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
-                    detected_emotion = predict_bert_emotion(text)
-                    st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
-                    st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
-                    if detected_emotion in video_links:
-                        st.video(video_links[detected_emotion])
-                else:
-                    st.warning("⚠️ Could not detect any speech. Please try again.")
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
+            if os.path.exists("user_voice.wav"):
+                try:
+                    text = speech_to_text("user_voice.wav")
+                    if text:
+                        st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
+                        detected_emotion = predict_bert_emotion(text)
+                        st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+                        st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
+                        if detected_emotion in video_links:
+                            st.video(video_links[detected_emotion])
+                    else:
+                        st.warning("⚠️ Could not detect any speech. Please try again.")
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
+            else:
+                st.warning("⚠️ Please record your voice first.")
 
-# ---------------- Sidebar Features ----------------
+# ---------- Sidebar Info ----------
 st.sidebar.markdown("## 🌟 Features")
 st.sidebar.write("✅ Detect emotion from text or voice")  
 st.sidebar.write("🤖 AI-generated chatbot responses")  
-st.sidebar.write("📺 Video recommendations based on emotion")
-
-
-
+st.sidebar.write("📺 Video recommendations based on emotion")  
