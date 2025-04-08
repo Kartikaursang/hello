@@ -9,4 +9,4 @@ scipy==1.15.2
 nltk==3.9.1
 soundfile==0.13.1
 transformers>=4.26.0
-sounddevice
+sounddevice==0.5.1
