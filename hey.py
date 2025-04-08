@@ -46,10 +46,28 @@ video_links = {
 # Record audio
 def record_audio(filename="user_voice.wav", duration=5, fs=44100):
     st.write("🎤 Recording... Speak now!")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
-    sd.wait()
-    wav.write(filename, fs, audio)
-    st.success("✅ Recording saved!")
+
+    # List available devices
+    available_devices = sd.query_devices()
+    st.write("Available Devices:", available_devices)
+
+    # Try to set the correct input device. You can specify device_id manually if needed.
+    device_id = None
+    for device in available_devices:
+        if 'input' in device['hostapi'] and device['max_input_channels'] > 0:
+            device_id = device['index']  # Select the first available input device
+
+    if device_id is None:
+        st.error("❌ No audio input device found.")
+        return
+
+    try:
+        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16, device=device_id)
+        sd.wait()
+        wav.write(filename, fs, audio)
+        st.success("✅ Recording saved!")
+    except Exception as e:
+        st.error(f"Error during audio recording: {str(e)}")
 
 # Convert speech to text
 def speech_to_text(file_path):
