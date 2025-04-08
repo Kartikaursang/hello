@@ -1,119 +1,148 @@
-import streamlit as st
+import os
+import librosa
+import numpy as np
+import sounddevice as sd
+import scipy.io.wavfile as wav
 import torch
+import speech_recognition as sr
+import nltk
+import streamlit as st
+import random
+from nltk.sentiment import SentimentIntensityAnalyzer
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
-import speech_recognition as sr
-from st_audiorec import st_audiorec
-import numpy as np
-import random
-import nltk
-import io
-import wave
 
-# Setup
-nltk.download('vader_lexicon', quiet=True)
+# Initialize NLTK
+nltk.download('vader_lexicon')
+sia = SentimentIntensityAnalyzer()
 
-st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", 
-                   page_icon="🎙️", 
-                   layout="centered")
+# Load BERT sentiment model
+MODEL_PATH = "your_bert_sentiment_model"  # Replace with actual folder path
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
 
-# Load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained("bert_emotion_model")
-model = AutoModelForSequenceClassification.from_pretrained("bert_emotion_model")
-model.eval()
+# Emotion labels (customize as per your model training order)
+bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
-emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
-responses = {
-    "anger": ["Take a deep breath. It's okay to feel this way."],
-    "fear": ["You’re safe here. Want to talk about it?"],
-    "joy": ["That's amazing! 😊 Keep smiling!"],
-    "love": ["Love is powerful. Spread it! 💖"],
-    "sadness": ["It's okay to feel sad. I'm here for you."],
-    "surprise": ["Oh wow! That’s unexpected!"]
+emotion_responses = {
+    "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
+    "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
+    "joy": ["That's wonderful! 😊 Let's keep the good vibes going!", "Joy is a beautiful feeling. Celebrate it!"],
+    "love": ["That's heartwarming! Spread the love 💖", "Love makes the world brighter. Tell someone you care!"],
+    "sadness": ["I'm here for you. Want to talk about it? 💙", "Things will get better. Stay strong!"],
+    "surprise": ["Oh wow! That sounds interesting!", "Surprises can be exciting! Want to share more?"]
 }
 
 video_links = {
-    "anger": "https://youtu.be/66gH1xmXkzI",
-    "fear": "https://youtu.be/AETFvQonfV8",
-    "joy": "https://youtu.be/OcmcptbsvzQ",
-    "love": "https://youtu.be/UAaWoz9wJ_4",
-    "sadness": "https://youtu.be/W937gFzsD-c",
-    "surprise": "https://youtu.be/PE2GkSgOZMA"
+    "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
+    "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
+    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
+    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
+    "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
+    "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
 
-# ------------------- Functions -------------------
 
-def predict_emotion(text):
+# Record audio
+def record_audio(filename="user_voice.wav", duration=5, fs=44100):
+    st.write("🎤 Recording... Speak now!")
+    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
+    sd.wait()
+    wav.write(filename, fs, audio)
+    st.success("✅ Recording saved!")
+
+# Convert speech to text
+def speech_to_text(file_path):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(file_path) as source:
+        audio = recognizer.record(source)
+        try:
+            return recognizer.recognize_google(audio)
+        except (sr.UnknownValueError, sr.RequestError):
+            return None
+
+# BERT-based sentiment analyzer
+def analyze_sentiment_bert(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
-        logits = model(**inputs).logits
-    probs = softmax(logits.numpy()[0])
-    top_index = np.argmax(probs)
-    return emotion_labels[top_index]
+        outputs = model(**inputs)
+        scores = outputs.logits[0].numpy()
+        probs = softmax(scores)
+        predicted_label = np.argmax(probs)
+    return id2label[predicted_label]
 
-def speech_to_text(audio_data):
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_data) as source:
-        audio = recognizer.record(source)
-    try:
-        return recognizer.recognize_google(audio)
-    except:
-        return None
+# Generate chatbot response
+def generate_response(emotion):
+    return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
 
-def response_for_emotion(emotion):
-    return random.choice(responses.get(emotion, ["I'm here to listen!"]))
+# Streamlit UI
+st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", page_icon="🎙️", layout="centered")
 
-# ------------------- UI -------------------
+st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(to right, #FFDEE9, #B5FFFC);
+        font-family: 'Arial', sans-serif;
+    }
+    .title {
+        color: #ff4b5c;
+        font-size: 36px;
+        font-weight: bold;
+        text-align: center;
+    }
+    .subtitle {
+        color: #333;
+        font-size: 18px;
+        text-align: center;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.title("🎙️ EmotiCare - AI Emotion Detection Chatbot")
-st.write("Detect your emotion from **text or voice**, and get emotional support with an AI-powered chatbot!")
+st.markdown('<p class="title">🎙️ EmotiCare - Emotion Based AI Chatbot</p>', unsafe_allow_html=True)
+st.markdown('<p class="subtitle">Detect emotions from your voice or text and receive personalized responses!</p>', unsafe_allow_html=True)
 
-input_type = st.radio("Select input method:", ["Text", "Voice"])
+st.sidebar.title("🔍 Choose Input Method")
+input_type = st.sidebar.radio("", ["Text", "Voice"])
 
 if input_type == "Text":
-    user_input = st.text_input("💬 Enter your message")
-    if st.button("Analyze Emotion"):
-        if user_input:
-            emotion = predict_emotion(user_input)
-            st.markdown(f"### 🎭 Emotion: **{emotion.capitalize()}**")
-            st.success(f"🤖 {response_for_emotion(emotion)}")
-            st.video(video_links[emotion])
+    user_text = st.text_input("💬 Type your message:")
+    if st.button("Analyze Emotion 🎭", key="analyze_text"):
+        if user_text:
+            with st.spinner("🔍 Analyzing Emotion..."):
+                detected_emotion = analyze_sentiment_bert(user_text)
+            st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+            st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
+            if detected_emotion in video_links:
+                st.markdown("### 📺 **Check out this video!**")
+                st.video(video_links[detected_emotion])
         else:
-            st.warning("Please enter a message.")
+            st.warning("⚠️ Please enter some text.")
 
 elif input_type == "Voice":
-    st.markdown("### 🎤 Record your voice")
-    audio_data = st_audiorec()
+    if st.button("🎙️ Record Voice", key="record_voice"):
+        record_audio("user_voice.wav")
 
-    if audio_data is not None:
-        # Save the audio bytes
-        with wave.open("audio.wav", "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(44100)
-            wf.writeframes(audio_data)
+    if st.button("Analyze Voice Emotion 🎭", key="analyze_voice"):
+        with st.spinner("🎧 Processing Audio..."):
+            text = speech_to_text("user_voice.wav")
+            if text:
+                detected_emotion = analyze_sentiment_bert(text)
+            else:
+                detected_emotion = "neutral"  # fallback
 
-        st.success("Audio Recorded Successfully!")
+        if text:
+            st.markdown(f"### 📝 **Recorded Text:** _{text}_")
 
-        with st.spinner("Transcribing..."):
-            try:
-                text = speech_to_text("audio.wav")
-                if text:
-                    st.markdown(f"**📝 Transcribed Text:** _{text}_")
-                    emotion = predict_emotion(text)
-                    st.markdown(f"### 🎭 Emotion: **{emotion.capitalize()}**")
-                    st.success(f"🤖 {response_for_emotion(emotion)}")
-                    st.video(video_links[emotion])
-                else:
-                    st.warning("Couldn't detect speech. Try again.")
-            except Exception as e:
-                st.error(f"Transcription failed: {e}")
+        st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+        st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
+        if detected_emotion in video_links:
+            st.markdown("### 📺 **Check out this video!**")
+            st.video(video_links[detected_emotion])
 
-# ------------------- Sidebar -------------------
-
-st.sidebar.markdown("## 🔍 Features")
-st.sidebar.write("- Text/Voice emotion detection")
-st.sidebar.write("- AI chatbot replies based on emotion")
-st.sidebar.write("- 🎥 Recommended videos for mental wellness")
-
+# Sidebar Extras
+st.sidebar.markdown("## 🌟 Features")
+st.sidebar.write("Detect emotion from **text** or **voice**")  
+st.sidebar.write("Get AI-generated **chatbot responses**")  
+st.sidebar.write("Receive **video recommendations**")  
+st.sidebar.write("**Modern UI with smooth gradients**")
