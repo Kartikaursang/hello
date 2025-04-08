@@ -21,9 +21,9 @@ MODEL_PATH = "bert_emotion_model"  # Replace with actual folder path
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
 
-# Emotion labels (customize as per your model training order)
+# Emotion labels (customize if needed to match your model's training order)
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
-
+id2label = {i: label for i, label in enumerate(bert_emotion_labels)}  # ✅ Add this line
 
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
@@ -37,12 +37,11 @@ emotion_responses = {
 video_links = {
     "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
     "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
-    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
-    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
+    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",
+    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",
     "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
     "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
-
 
 # Record audio
 def record_audio(filename="user_voice.wav", duration=5, fs=44100):
