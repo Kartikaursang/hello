@@ -1,5 +1,5 @@
-streamlit-webrtc==0.36.0 
-streamlit==1.44.1
+streamlit-webrtc==0.31.0
+streamlit==1.14.0
 streamlit-audiorecorder==0.0.6
 speechrecognition==3.14.2
 librosa==0.11.0
