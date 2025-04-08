@@ -1,8 +1,5 @@
 import os
-import librosa
 import numpy as np
-import sounddevice as sd
-import scipy.io.wavfile as wav
 import torch
 import speech_recognition as sr
 import nltk
@@ -17,14 +14,15 @@ nltk.download('vader_lexicon')
 sia = SentimentIntensityAnalyzer()
 
 # Load BERT sentiment model
-MODEL_PATH = "bert_emotion_model"  # Replace with actual folder path
+MODEL_PATH = "bert_emotion_model"  # Replace with actual model directory
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
 
-# Emotion labels (customize if needed to match your model's training order)
+# Emotion labels (customize based on your model's label order)
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
-id2label = {i: label for i, label in enumerate(bert_emotion_labels)}  # ✅ Add this line
+id2label = {i: label for i, label in enumerate(bert_emotion_labels)}
 
+# Predefined emotion responses
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
     "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
@@ -34,6 +32,7 @@ emotion_responses = {
     "surprise": ["Oh wow! That sounds interesting!", "Surprises can be exciting! Want to share more?"]
 }
 
+# Video suggestions
 video_links = {
     "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
     "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
@@ -42,14 +41,6 @@ video_links = {
     "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
     "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
-
-# Record audio
-def record_audio(filename="user_voice.wav", duration=5, fs=44100):
-    st.write("🎤 Recording... Speak now!")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
-    sd.wait()
-    wav.write(filename, fs, audio)
-    st.success("✅ Recording saved!")
 
 # Convert speech to text
 def speech_to_text(file_path):
@@ -61,7 +52,7 @@ def speech_to_text(file_path):
         except (sr.UnknownValueError, sr.RequestError):
             return None
 
-# BERT-based sentiment analyzer
+# BERT-based sentiment analysis
 def analyze_sentiment_bert(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
@@ -71,11 +62,11 @@ def analyze_sentiment_bert(text):
         predicted_label = np.argmax(probs)
     return id2label[predicted_label]
 
-# Generate chatbot response
+# Chatbot response generator
 def generate_response(emotion):
     return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
 
-# Streamlit UI
+# Streamlit UI setup
 st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", page_icon="🎙️", layout="centered")
 
 st.markdown("""
@@ -104,6 +95,7 @@ st.markdown('<p class="subtitle">Detect emotions from your voice or text and rec
 st.sidebar.title("🔍 Choose Input Method")
 input_type = st.sidebar.radio("", ["Text", "Voice"])
 
+# Text-based emotion detection
 if input_type == "Text":
     user_text = st.text_input("💬 Type your message:")
     if st.button("Analyze Emotion 🎭", key="analyze_text"):
@@ -118,30 +110,34 @@ if input_type == "Text":
         else:
             st.warning("⚠️ Please enter some text.")
 
+# Voice-based emotion detection via upload
 elif input_type == "Voice":
-    if st.button("🎙️ Record Voice", key="record_voice"):
-        record_audio("user_voice.wav")
+    uploaded_audio = st.file_uploader("🎙️ Upload your voice (WAV format)", type=["wav"])
 
-    if st.button("Analyze Voice Emotion 🎭", key="analyze_voice"):
-        with st.spinner("🎧 Processing Audio..."):
-            text = speech_to_text("user_voice.wav")
+    if uploaded_audio is not None:
+        with open("user_voice.wav", "wb") as f:
+            f.write(uploaded_audio.read())
+
+        if st.button("Analyze Voice Emotion 🎭", key="analyze_voice"):
+            with st.spinner("🎧 Processing Audio..."):
+                text = speech_to_text("user_voice.wav")
+                if text:
+                    detected_emotion = analyze_sentiment_bert(text)
+                else:
+                    detected_emotion = "neutral"
+
             if text:
-                detected_emotion = analyze_sentiment_bert(text)
-            else:
-                detected_emotion = "neutral"  # fallback
+                st.markdown(f"### 📝 **Recorded Text:** _{text}_")
 
-        if text:
-            st.markdown(f"### 📝 **Recorded Text:** _{text}_")
+            st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+            st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
+            if detected_emotion in video_links:
+                st.markdown("### 📺 **Check out this video!**")
+                st.video(video_links[detected_emotion])
 
-        st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
-        st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
-        if detected_emotion in video_links:
-            st.markdown("### 📺 **Check out this video!**")
-            st.video(video_links[detected_emotion])
-
-# Sidebar Extras
+# Sidebar Info
 st.sidebar.markdown("## 🌟 Features")
-st.sidebar.write("Detect emotion from **text** or **voice**")  
-st.sidebar.write("Get AI-generated **chatbot responses**")  
-st.sidebar.write("Receive **video recommendations**")  
-st.sidebar.write("**Modern UI with smooth gradients**")
+st.sidebar.write("✅ Detect emotion from **text** or **voice**")  
+st.sidebar.write("✅ Get AI-generated **chatbot responses**")  
+st.sidebar.write("✅ Receive **video recommendations**")  
+st.sidebar.write("✅ Modern UI with smooth gradients")  
