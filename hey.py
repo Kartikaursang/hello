@@ -1,7 +1,8 @@
 import os
 import librosa
 import numpy as np
-import soundfile as sf
+import sounddevice as sd
+import scipy.io.wavfile as wav
 import streamlit as st
 import random
 import nltk
@@ -9,7 +10,6 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
 import speech_recognition as sr
-from audiorecorder import audiorecorder
 
 st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", 
                    page_icon="🎙️", 
@@ -32,6 +32,7 @@ except Exception as e:
 # Emotion labels (customize as per your model training order)
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
+
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
     "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
@@ -44,22 +45,20 @@ emotion_responses = {
 video_links = {
     "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
     "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
-    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",
-    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",
+    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
+    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
     "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
     "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
 }
 
 # ---------------- Functions ----------------
 
-def record_audio_streamlit():
-    st.write("🎤 Click below to start recording:")
-    audio = audiorecorder("Start Recording", "Recording...")
-    if len(audio) > 0:
-        sf.write("user_voice.wav", audio.tobytes(), samplerate=44100)
-        st.success("✅ Audio saved as user_voice.wav")
-        return True
-    return False
+def record_audio(filename="user_voice.wav", duration=5, fs=44100):
+    st.write("🎤 Recording... Speak now!")
+    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
+    sd.wait()
+    wav.write(filename, fs, audio)
+    st.success("✅ Recording saved!")
 
 def speech_to_text(file_path):
     recognizer = sr.Recognizer()
@@ -111,10 +110,10 @@ if input_type == "Text":
             st.warning("⚠️ Please enter some text.")
 
 elif input_type == "Voice":
-    st.write("🎙️ Record Voice")
-    recorded = record_audio_streamlit()
+    if st.button("🎙️ Record Voice"):
+        record_audio("user_voice.wav")
 
-    if st.button("Analyze Voice Emotion 🎭") and recorded:
+    if st.button("Analyze Voice Emotion 🎭"):
         with st.spinner("🎧 Processing Audio..."):
             try:
                 text = speech_to_text("user_voice.wav")
@@ -135,3 +134,6 @@ st.sidebar.markdown("## 🌟 Features")
 st.sidebar.write("✅ Detect emotion from text or voice")  
 st.sidebar.write("🤖 AI-generated chatbot responses")  
 st.sidebar.write("📺 Video recommendations based on emotion")
+
+
+
