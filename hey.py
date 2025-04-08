@@ -46,10 +46,26 @@ video_links = {
 # Record audio
 def record_audio(filename="user_voice.wav", duration=5, fs=44100):
     st.write("🎤 Recording... Speak now!")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16)
-    sd.wait()
-    wav.write(filename, fs, audio)
-    st.success("✅ Recording saved!")
+
+    # List available audio devices
+    devices = sd.query_devices()
+    input_devices = [device for i, device in enumerate(devices) if device['max_input_channels'] > 0]
+    
+    # Provide a dropdown to select device
+    device_names = [device['name'] for device in input_devices]
+    device_index = st.selectbox("Select your microphone", device_names)
+
+    # Get the device index based on the selection
+    selected_device = next(device for device in input_devices if device['name'] == device_index)
+    device_id = selected_device['index']
+
+    try:
+        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype=np.int16, device=device_id)
+        sd.wait()
+        wav.write(filename, fs, audio)
+        st.success("✅ Recording saved!")
+    except Exception as e:
+        st.error(f"Error recording audio: {str(e)}")
 
 # Convert speech to text
 def speech_to_text(file_path):
