@@ -17,7 +17,7 @@ nltk.download('vader_lexicon')
 sia = SentimentIntensityAnalyzer()
 
 # Load BERT sentiment model
-MODEL_PATH = "your_bert_sentiment_model"  # Replace with actual folder path
+MODEL_PATH = "bert_emotion_model"  # Replace with actual folder path
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 model = AutoModelForSequenceClassification.from_pretrained(MODEL_PATH)
 
