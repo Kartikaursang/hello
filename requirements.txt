@@ -4,8 +4,9 @@ streamlit-audiorecorder
 speechrecognition
 librosa
 torch
-transformers
+
 scipy
 nltk
 soundfile
 transformers>=4.26.0
+pyaudio
