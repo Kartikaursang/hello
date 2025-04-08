@@ -10,3 +10,14 @@ nltk
 soundfile
 transformers>=4.26.0
 portaudio
+streamlit==1.17.0
+pygments==2.19.1
+markdown-it-py==3.0.0
+rich==14.0.0
+soundfile
+pydub
+numpy
+transformers
+librosa
+speechrecognition
+nltk
