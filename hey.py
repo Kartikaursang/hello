@@ -1,23 +1,11 @@
-import os
-import librosa
-import numpy as np
-import sounddevice as sd
-import scipy.io.wavfile as wav
 import streamlit as st
-import random
-import nltk
-import torch
+import sounddevice as sd
+import numpy as np
+import speech_recognition as sr
+import librosa
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
-import speech_recognition as sr
-import io
-
-st.set_page_config(page_title="EmotiCare - Emotion Based AI Chatbot", 
-                   page_icon="🎙️", 
-                   layout="centered")
-
-# Download NLTK resources
-nltk.download('vader_lexicon', quiet=True)
+import torch
 
 # Load BERT model and tokenizer
 BERT_MODEL_PATH = "bert_emotion_model"
@@ -30,29 +18,10 @@ try:
 except Exception as e:
     st.error(f"❌ Failed to load BERT emotion model: {e}")
 
-# Emotion labels (customize as per your model training order)
+# Emotion labels
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
-emotion_responses = {
-    "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
-    "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
-    "joy": ["That's wonderful! 😊 Let's keep the good vibes going!", "Joy is a beautiful feeling. Celebrate it!"],
-    "love": ["That's heartwarming! Spread the love 💖", "Love makes the world brighter. Tell someone you care!"],
-    "sadness": ["I'm here for you. Want to talk about it? 💙", "Things will get better. Stay strong!"],
-    "surprise": ["Oh wow! That sounds interesting!", "Surprises can be exciting! Want to share more?"]
-}
-
-video_links = {
-    "anger": "https://youtu.be/66gH1xmXkzI?si=zDv3BIHqQqXYlEqx",
-    "fear": "https://youtu.be/AETFvQonfV8?si=h7JWyBwTyYPKwqtc",
-    "joy": "https://youtu.be/OcmcptbsvzQ?si=hUQtzH0vRyGV5hmK",  # same as happy
-    "love": "https://youtu.be/UAaWoz9wJ_4?si=Qktt7mDUXRmFda5t",  # used calm/loving video
-    "sadness": "https://youtu.be/W937gFzsD-c?si=aT3DcRssJRdF0SeH",
-    "surprise": "https://youtu.be/PE2GkSgOZMA?si=yZwanX7PC16C73SG"
-}
-
-# ---------------- Functions ----------------
-
+# Function to convert audio to text using speech recognition
 def speech_to_text_from_audio(audio_data):
     recognizer = sr.Recognizer()
     with sr.AudioData(audio_data.tobytes(), 16000, 2) as source_audio:
@@ -62,6 +31,7 @@ def speech_to_text_from_audio(audio_data):
         except sr.UnknownValueError:
             return None
 
+# Predict emotion from text using BERT model
 def predict_bert_emotion(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
@@ -70,54 +40,40 @@ def predict_bert_emotion(text):
     top_index = np.argmax(scores)
     return bert_emotion_labels[top_index]
 
-def generate_response(emotion):
-    return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
-
+# Record audio using the microphone
 def record_audio(duration=5, samplerate=16000):
     """ Record audio using sounddevice library and specify input device """
-    st.write("🎙️ Recording your voice...")
-
-    # List available devices and check if there are any input devices
     devices = sd.query_devices()
-    if not devices:  # If no devices are found
+    st.write(devices)  # Display all available devices in the Streamlit UI
+    
+    # Check if there are any input devices
+    if not any(dev['max_input_channels'] > 0 for dev in devices):
         st.error("⚠️ No audio input devices found. Please check your microphone.")
         return None
 
-    # Display available devices for debugging
-    st.write(devices)  # Print devices in Streamlit UI
+    # Select the first input device
+    input_device = None
+    for dev in devices:
+        if dev['max_input_channels'] > 0:
+            input_device = dev
+            break
 
-    # Try to select the first available input device
-    try:
-        input_device = devices[0]['name']  # Replace with the correct index if needed
-        st.write(f"Selected device: {input_device}")
-    except IndexError:
-        st.error("⚠️ No input device found.")
+    if input_device is None:
+        st.error("⚠️ No microphone found in the available devices.")
         return None
+    
+    st.write(f"Using device: {input_device['name']}")
+    
+    # Record audio for the specified duration
+    audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
+    sd.wait()  # Wait until recording is finished
+    return audio_data
 
-    # Record audio
-    try:
-        audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16', device=input_device)
-        sd.wait()  # Wait until recording is finished
-        return audio_data
-    except Exception as e:
-        st.error(f"⚠️ Error recording audio: {e}")
-        return None
+# Web UI with Streamlit
+st.title("🎙️ EmotiCare - Emotion Based AI Chatbot")
+st.write("Record your voice to detect emotions or type a message!")
 
-# ---------------- UI ----------------
-
-st.markdown("""
-    <style>
-    .stApp { background: linear-gradient(to right, #FFDEE9, #B5FFFC); font-family: 'Arial', sans-serif; }
-    .title { color: #ff4b5c; font-size: 36px; font-weight: bold; text-align: center; }
-    .subtitle { color: #333; font-size: 18px; text-align: center; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.markdown('<p class="title">🎙️ EmotiCare - Emotion Based AI Chatbot</p>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Detect emotions from your voice or text and receive personalized responses!</p>', unsafe_allow_html=True)
-
-st.sidebar.title("🔍 Choose Input Method")
-input_type = st.sidebar.radio("", ["Text", "Voice"])
+input_type = st.sidebar.radio("Choose Input Method", ["Text", "Voice"])
 
 if input_type == "Text":
     user_text = st.text_input("💬 Type your message:")
@@ -126,30 +82,21 @@ if input_type == "Text":
             with st.spinner("🔍 Analyzing Emotion..."):
                 detected_emotion = predict_bert_emotion(user_text)
             st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
-            st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
-            if detected_emotion in video_links:
-                st.video(video_links[detected_emotion])
         else:
             st.warning("⚠️ Please enter some text.")
 
 elif input_type == "Voice":
-    st.write("🎙️ Record your voice:")
-    
-    if st.button("Start Recording"):
-        audio_data = record_audio(duration=5)  # Record for 5 seconds
-        if audio_data is not None:
-            st.write("🎧 Processing your audio...")
+    st.write("🎙️ Recording your voice...")
 
-            # Convert audio to text
-            audio_bytes = io.BytesIO(audio_data.tobytes())  # Convert to a BytesIO object for recognition
-            text = speech_to_text_from_audio(audio_bytes)
-            
-            if text:
-                st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
-                detected_emotion = predict_bert_emotion(text)
-                st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
-                st.success(f"🤖 Chatbot: {generate_response(detected_emotion)}")
-                if detected_emotion in video_links:
-                    st.video(video_links[detected_emotion])
-            else:
-                st.warning("⚠️ Could not detect any speech. Please try again.")
+    # Record audio using the microphone
+    audio_data = record_audio(duration=5)  # Record for 5 seconds
+    if audio_data is not None:
+        # Process the recorded audio
+        st.write("🎧 Processing audio...")
+        text = speech_to_text_from_audio(audio_data)
+        if text:
+            st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
+            detected_emotion = predict_bert_emotion(text)
+            st.markdown(f"### 🎭 Detected Emotion: **{detected_emotion.capitalize()}**")
+        else:
+            st.warning("⚠️ Could not transcribe the audio. Please try again.")
