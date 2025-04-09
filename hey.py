@@ -74,9 +74,15 @@ def generate_response(emotion):
     return random.choice(emotion_responses.get(emotion, ["I'm here to chat! 😊"]))
 
 def record_audio(duration=5, samplerate=16000):
-    """ Record audio using sounddevice library """
+    """ Record audio using sounddevice library and specify input device """
     st.write("🎙️ Recording your voice...")
-    audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
+    
+    # List available devices and select the first input device (you can modify this based on your setup)
+    devices = sd.query_devices()
+    input_device = devices[0]['name']  # Replace with the correct index if needed
+
+    # Record audio
+    audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16', device=input_device)
     sd.wait()  # Wait until recording is finished
     return audio_data
 
@@ -135,4 +141,3 @@ st.sidebar.markdown("## 🌟 Features")
 st.sidebar.write("✅ Detect emotion from text or voice")  
 st.sidebar.write("🤖 AI-generated chatbot responses")  
 st.sidebar.write("📺 Video recommendations based on emotion")
-
