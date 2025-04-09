@@ -110,13 +110,13 @@ if input_type == "Text":
 
 elif input_type == "Voice":
     st.write("🎙️ Record your voice:")
-    
+
     # Configure WebRTC to capture audio only (no video)
     webrtc_ctx = webrtc_streamer(
         key="audio-input-demo",
         mode=WebRtcMode.SENDRECV,
-        audio_processor_factory=AudioProcessor,
-        video_processor_factory=None,  # No video processing, only audio
+        audio_processor_factory=AudioProcessor,  # Only process audio
+        video_processor_factory=None,  # Disable video processing
         rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
     )
     
@@ -125,6 +125,7 @@ elif input_type == "Voice":
             audio_data = webrtc_ctx.audio_receiver.get_audio()
             if audio_data is not None:
                 st.write("🎧 Processing audio...")
+                # Convert audio to text
                 text = speech_to_text_from_audio(audio_data)
                 if text:
                     st.markdown(f"### 📝 **Transcribed Text:** _{text}_")
@@ -142,4 +143,4 @@ elif input_type == "Voice":
 st.sidebar.markdown("## 🌟 Features")
 st.sidebar.write("✅ Detect emotion from text or voice")  
 st.sidebar.write("🤖 AI-generated chatbot responses")  
-st.sidebar.write("📺 Video recommendations based on emotion")  
+st.sidebar.write("📺 Video recommendations based on emotion")
