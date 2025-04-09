@@ -33,7 +33,6 @@ except Exception as e:
 # Emotion labels (customize as per your model training order)
 bert_emotion_labels = ['anger', 'fear', 'joy', 'love', 'sadness', 'surprise']
 
-
 emotion_responses = {
     "anger": ["I understand. Take a deep breath. Want some help calming down?", "Try some relaxation techniques!"],
     "fear": ["It's okay to feel scared. Want to talk about it?", "Fear is natural. Take a deep breath."],
@@ -132,10 +131,11 @@ elif input_type == "Voice":
                     st.video(video_links[detected_emotion])
             else:
                 st.warning("⚠️ Could not detect any speech. Please try again.")
+        else:
+            st.warning("⚠️ Waiting for audio...")
 
 # ---------------- Sidebar Features ----------------
 st.sidebar.markdown("## 🌟 Features")
 st.sidebar.write("✅ Detect emotion from text or voice")  
 st.sidebar.write("🤖 AI-generated chatbot responses")  
 st.sidebar.write("📺 Video recommendations based on emotion")
-
